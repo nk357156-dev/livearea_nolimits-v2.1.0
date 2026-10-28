@@ -21,6 +21,12 @@ typedef struct {
     int a, b, c, d;
 } Face;
 
+typedef struct {
+    int indices[4];
+    float avgZ;
+    uint32_t color;
+} DrawFace;
+
 static const Vec3 cubeVerts[8] = {
     {-1.0f, -1.0f, -1.0f},
     { 1.0f, -1.0f, -1.0f},
@@ -39,6 +45,15 @@ static const Face cubeFaces[6] = {
     {1, 2, 6, 5},
     {2, 3, 7, 6},
     {3, 0, 4, 7}
+};
+
+static const uint32_t faceColors[6] = {
+    RGBA8(255, 80, 80, 255),
+    RGBA8(80, 255, 80, 255),
+    RGBA8(80, 120, 255, 255),
+    RGBA8(255, 200, 80, 255),
+    RGBA8(255, 80, 255, 255),
+    RGBA8(80, 255, 255, 255)
 };
 
 static void rotatePoint(Vec3 *p, float ax, float ay) {
@@ -65,9 +80,52 @@ static Vec2 projectPoint(Vec3 p) {
     return r;
 }
 
+static void drawFilledQuad(Vec2 p[4], uint32_t color) {
+    int minX = (int)floorf(fminf(fminf(p[0].x, p[1].x), fminf(p[2].x, p[3].x)));
+    int maxX = (int)ceilf(fmaxf(fmaxf(p[0].x, p[1].x), fmaxf(p[2].x, p[3].x)));
+    int minY = (int)floorf(fminf(fminf(p[0].y, p[1].y), fminf(p[2].y, p[3].y)));
+    int maxY = (int)ceilf(fmaxf(fmaxf(p[0].y, p[1].y), fmaxf(p[2].y, p[3].y)));
+
+    for (int y = minY; y <= maxY; y++) {
+        float xs[8];
+        int count = 0;
+
+        for (int i = 0; i < 4; i++) {
+            Vec2 a = p[i];
+            Vec2 b = p[(i + 1) % 4];
+
+            if ((a.y > (float)y && b.y <= (float)y) || (b.y > (float)y && a.y <= (float)y)) {
+                float t = (float)(y - a.y) / (b.y - a.y);
+                xs[count++] = a.x + (b.x - a.x) * t;
+            }
+        }
+
+        if (count >= 2) {
+            for (int i = 0; i < count - 1; i++) {
+                for (int j = i + 1; j < count; j++) {
+                    if (xs[i] > xs[j]) {
+                        float tmp = xs[i];
+                        xs[i] = xs[j];
+                        xs[j] = tmp;
+                    }
+                }
+            }
+
+            for (int i = 0; i + 1 < count; i += 2) {
+                int x1 = (int)floorf(xs[i]);
+                int x2 = (int)ceilf(xs[i + 1]);
+                if (x2 > x1) {
+                    vita2d_draw_line((float)x1, (float)y, (float)x2, (float)y, color);
+                }
+            }
+        }
+    }
+}
+
 static void drawCube(float rx, float ry) {
     Vec3 rot[8];
     Vec2 proj[8];
+    DrawFace faces[6];
 
     for (int i = 0; i < 8; i++) {
         rot[i] = cubeVerts[i];
@@ -76,15 +134,38 @@ static void drawCube(float rx, float ry) {
     }
 
     for (int i = 0; i < 6; i++) {
-        int a = cubeFaces[i].a;
-        int b = cubeFaces[i].b;
-        int c = cubeFaces[i].c;
-        int d = cubeFaces[i].d;
+        faces[i].indices[0] = cubeFaces[i].a;
+        faces[i].indices[1] = cubeFaces[i].b;
+        faces[i].indices[2] = cubeFaces[i].c;
+        faces[i].indices[3] = cubeFaces[i].d;
 
-        vita2d_draw_line(proj[a].x, proj[a].y, proj[b].x, proj[b].y, RGBA8(255, 255, 255, 255));
-        vita2d_draw_line(proj[b].x, proj[b].y, proj[c].x, proj[c].y, RGBA8(255, 255, 255, 255));
-        vita2d_draw_line(proj[c].x, proj[c].y, proj[d].x, proj[d].y, RGBA8(255, 255, 255, 255));
-        vita2d_draw_line(proj[d].x, proj[d].y, proj[a].x, proj[a].y, RGBA8(255, 255, 255, 255));
+        faces[i].avgZ = (rot[cubeFaces[i].a].z + rot[cubeFaces[i].b].z + rot[cubeFaces[i].c].z + rot[cubeFaces[i].d].z) / 4.0f;
+        faces[i].color = faceColors[i];
+    }
+
+    for (int i = 0; i < 6; i++) {
+        for (int j = i + 1; j < 6; j++) {
+            if (faces[j].avgZ > faces[i].avgZ) {
+                DrawFace tmp = faces[i];
+                faces[i] = faces[j];
+                faces[j] = tmp;
+            }
+        }
+    }
+
+    for (int i = 0; i < 6; i++) {
+        Vec2 facePoints[4];
+        for (int j = 0; j < 4; j++) {
+            facePoints[j] = proj[faces[i].indices[j]];
+        }
+
+        drawFilledQuad(facePoints, faces[i].color);
+
+        for (int j = 0; j < 4; j++) {
+            Vec2 a = facePoints[j];
+            Vec2 b = facePoints[(j + 1) % 4];
+            vita2d_draw_line(a.x, a.y, b.x, b.y, RGBA8(20, 20, 20, 255));
+        }
     }
 }
 
