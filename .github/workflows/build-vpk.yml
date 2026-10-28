@@ -9,18 +9,26 @@ on:
 jobs:
   build-vpk:
     runs-on: ubuntu-latest
-    container: devkitpro/devkitarm:latest
+    container:
+      image: devkitpro/devkitarm:latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Vita toolchain
+      - name: Check available Vita packages
         shell: bash
         run: |
           set -eux
-          dkp-pacman -Syu --noconfirm
-          dkp-pacman -S --needed --noconfirm vitasdk libvita2d
+          dkp-pacman -Ssq | grep -i vita || true
+
+      - name: Install required Vita packages without updating mirrors
+        shell: bash
+        run: |
+          set -eux
+          dkp-pacman -S --needed --noconfirm libvita2d || \
+          dkp-pacman -S --needed --noconfirm vita2d || \
+          dkp-pacman -S --needed --noconfirm vitasdk
 
       - name: Configure build environment
         shell: bash
