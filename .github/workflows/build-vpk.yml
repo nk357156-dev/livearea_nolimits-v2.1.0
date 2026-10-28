@@ -2,6 +2,8 @@ name: Build Vita VPK
 
 on:
   push:
+    tags:
+      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -12,13 +14,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install devkitPro and Vita toolchain
+      - name: Install devkitPro
         shell: bash
         run: |
+          set -eux
+
           sudo apt-get update
-          sudo apt-get install -y wget gnupg ca-certificates
-          wget -qO- https://apt.devkitpro.org/devkitpro-pub.gpg | sudo gpg --dearmor -o /usr/share/keyrings/devkitpro.gpg
-          echo 'deb [signed-by=/usr/share/keyrings/devkitpro.gpg] https://apt.devkitpro.org stable main' | sudo tee /etc/apt/sources.list.d/devkitpro.list
+          sudo apt-get install -y wget curl gnupg ca-certificates
+          sudo mkdir -p /etc/apt/keyrings
+
+          curl -fsSL https://apt.devkitpro.org/devkitpro-pub.gpg -o /tmp/devkitpro-pub.gpg
+          sudo gpg --dearmor -o /etc/apt/keyrings/devkitpro.gpg /tmp/devkitpro-pub.gpg
+
+          echo "deb [signed-by=/etc/apt/keyrings/devkitpro.gpg] https://apt.devkitpro.org stable main" | sudo tee /etc/apt/sources.list.d/devkitpro.list
+
           sudo apt-get update
           sudo apt-get install -y devkitpro-pacman
           sudo dkp-pacman -Syu --noconfirm
@@ -27,30 +36,31 @@ jobs:
       - name: Configure build environment
         shell: bash
         run: |
-          export VITASDK=/opt/devkitpro/vitasdk
-          export PATH="$VITASDK/bin:/opt/devkitpro/tools/bin:$PATH"
-          echo "VITASDK=$VITASDK" >> $GITHUB_ENV
-          echo "$VITASDK/bin" >> $GITHUB_PATH
-          echo "/opt/devkitpro/tools/bin" >> $GITHUB_PATH
+          echo "VITASDK=/opt/devkitpro/vitasdk" >> "$GITHUB_ENV"
+          echo "/opt/devkitpro/vitasdk/bin" >> "$GITHUB_PATH"
+          echo "/opt/devkitpro/tools/bin" >> "$GITHUB_PATH"
 
       - name: Build project
         shell: bash
+        env:
+          VITASDK: /opt/devkitpro/vitasdk
         run: |
-          export VITASDK=/opt/devkitpro/vitasdk
           export PATH="$VITASDK/bin:/opt/devkitpro/tools/bin:$PATH"
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
-      - name: Find output package
+      - name: Show generated files
         shell: bash
         run: |
-          echo "Searching for generated VPK and eboot files..."
+          echo "Generated files:"
           find build -type f \( -iname "*.vpk" -o -iname "eboot.bin" \) | sort
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
-          name: ps-vita-vpk
-          path: |
+          files: |
             build/**/*.vpk
             build/**/eboot.bin
+          draft: false
+          generate_release_notes: true
