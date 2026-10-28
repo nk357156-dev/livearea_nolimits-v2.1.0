@@ -19,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -eux
-          dkp-pacman -S --needed --noconfirm libvita2d
+          dkp-pacman -S --needed --noconfirm vita2d
 
       - name: Configure build environment
         shell: bash
