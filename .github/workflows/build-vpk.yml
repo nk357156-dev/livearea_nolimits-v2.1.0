@@ -15,11 +15,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Vita libraries
+      - name: Install Vita toolchain
         shell: bash
         run: |
           set -eux
-          dkp-pacman -S --needed --noconfirm vita2d
+          dkp-pacman -Syu --noconfirm
+          dkp-pacman -S --needed --noconfirm vitasdk libvita2d
 
       - name: Configure build environment
         shell: bash
